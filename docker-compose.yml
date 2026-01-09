@@ -1,5 +1,5 @@
 adapter:
-  image: node:12
+  image: node:20
   volumes:
     - $PWD:/home/node/sails-mongo
   links:
@@ -15,7 +15,7 @@ adapter:
     - bash -c "npm test"
 
 mongo:
-  image: mongo:4.2
+  image: mongo:8.0
   restart: always
   command: "--logpath=/dev/null"
   ports:
