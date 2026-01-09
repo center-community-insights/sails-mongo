@@ -485,6 +485,175 @@ describe('Functional :: Waterline + sails-mongo (real MongoDB)', function() {
     });
   });
 
+
+  // ==========================================================================
+  // Tests for create/createEach returning PKs and supporting .save() patterns
+  // These tests reproduce the issue with createOrUpdate -> .save() patterns
+  // ==========================================================================
+
+  it('should return record with PK from create() (with fetch enabled by default)', function(done) {
+    // Our test setup has fetchRecordsOnCreate: true, so records should be returned with PKs
+    models.user.create({
+      name: 'CreateWithPK',
+      age: 99,
+      email: 'createwithpk-'+Date.now()+'@example.com'
+    })
+    .exec(function(err, created) {
+      if (err) { return done(err); }
+      try {
+        assert(created, 'Expected a record to be returned');
+        assert.equal(typeof created.id, 'string', 'Expected id to be a string');
+        assert.match(created.id, /^[0-9a-f]{24}$/, 'Expected id to be a valid ObjectId hex');
+        assert.equal(created.name, 'CreateWithPK');
+      } catch (e) { return done(e); }
+      return done();
+    });
+  });
+
+
+  it('should return records with PKs from createEach() (with fetch enabled by default)', function(done) {
+    models.user.createEach([
+      { name: 'CreateEachPK1', age: 1, email: 'cepk1-'+Date.now()+'@example.com' },
+      { name: 'CreateEachPK2', age: 2, email: 'cepk2-'+Date.now()+'@example.com' }
+    ])
+    .exec(function(err, created) {
+      if (err) { return done(err); }
+      try {
+        assert(Array.isArray(created), 'Expected an array of records');
+        assert.equal(created.length, 2, 'Expected 2 records');
+        _.each(created, function(rec) {
+          assert.equal(typeof rec.id, 'string', 'Expected id to be a string');
+          assert.match(rec.id, /^[0-9a-f]{24}$/, 'Expected id to be a valid ObjectId hex');
+        });
+      } catch (e) { return done(e); }
+      return done();
+    });
+  });
+
+
+  it('should support createOrUpdate pattern: findOne returns record with PK for update', function(done) {
+    // This simulates what nxus-storage's createOrUpdate does when record exists:
+    // 1. findOne() - returns record instance
+    // 2. update() - updates and returns records
+    // 3. Waterline uses the PK from the returned record for the update
+
+    var email = 'createorupdate-'+Date.now()+'@example.com';
+
+    // Create a record first
+    models.user.create({ name: 'CreateOrUpdate', age: 1, email: email })
+    .exec(function(err, created) {
+      if (err) { return done(err); }
+      try {
+        assert(created, 'Expected created record');
+        assert(created.id, 'Expected created record to have an id');
+      } catch (e) { return done(e); }
+
+      // Now simulate createOrUpdate finding the existing record
+      models.user.findOne({ email: email }).exec(function(err, found) {
+        if (err) { return done(err); }
+        try {
+          assert(found, 'Expected to find the record');
+          assert(found.id, 'Expected found record to have an id');
+          assert.equal(found.id, created.id);
+        } catch (e) { return done(e); }
+
+        // Update the record (like createOrUpdate does when record exists)
+        models.user.update({ id: found.id }, { age: 2, name: 'CreateOrUpdate-Modified' })
+        .exec(function(err, updated) {
+          if (err) { return done(err); }
+          try {
+            assert(Array.isArray(updated));
+            assert.equal(updated.length, 1);
+            assert.equal(updated[0].age, 2);
+            assert.equal(updated[0].name, 'CreateOrUpdate-Modified');
+            assert(updated[0].id, 'Expected updated record to have an id');
+          } catch (e) { return done(e); }
+          return done();
+        });
+      });
+    });
+  });
+
+
+  it('should support findOrCreate pattern: returned record has PK for subsequent operations', function(done) {
+    var email = 'findorcreate-'+Date.now()+'@example.com';
+
+    models.user.findOrCreate(
+      { email: email },
+      { name: 'FindOrCreate', age: 1, email: email }
+    )
+    .exec(function(err, record, wasCreated) {
+      if (err) { return done(err); }
+      try {
+        assert(record, 'Expected a record');
+        assert(record.id, 'Expected record to have an id');
+        assert.equal(typeof record.id, 'string');
+        assert.match(record.id, /^[0-9a-f]{24}$/);
+        assert.equal(wasCreated, true, 'Expected record to be newly created');
+      } catch (e) { return done(e); }
+
+      // Use the PK for subsequent update
+      models.user.update({ id: record.id }, { age: 5 }).exec(function(err) {
+        if (err) { return done(err); }
+
+        // Verify persistence
+        models.user.findOne({ id: record.id }).exec(function(err, found) {
+          if (err) { return done(err); }
+          try {
+            assert(found);
+            assert.equal(found.age, 5);
+          } catch (e) { return done(e); }
+          return done();
+        });
+      });
+    });
+  });
+
+
+  it('should support chained updates: record from update has PK for further updates', function(done) {
+    models.user.create({
+      name: 'ChainedUpdate',
+      age: 1,
+      email: 'chainedupdate-'+Date.now()+'@example.com'
+    })
+    .exec(function(err, created) {
+      if (err) { return done(err); }
+
+      models.user.update({ id: created.id })
+      .set({ age: 2 })
+      .exec(function(err, updated) {
+        if (err) { return done(err); }
+        try {
+          assert(Array.isArray(updated));
+          assert.equal(updated.length, 1);
+          assert(updated[0].id, 'Expected updated record to have an id');
+          assert.equal(typeof updated[0].id, 'string');
+          assert.match(updated[0].id, /^[0-9a-f]{24}$/);
+        } catch (e) { return done(e); }
+
+        // Use the PK from updated record for another update
+        models.user.update({ id: updated[0].id }, { age: 3 }).exec(function(err, updated2) {
+          if (err) { return done(err); }
+          try {
+            assert(Array.isArray(updated2));
+            assert.equal(updated2.length, 1);
+            assert.equal(updated2[0].age, 3);
+          } catch (e) { return done(e); }
+
+          // Verify
+          models.user.findOne({ id: created.id }).exec(function(err, found) {
+            if (err) { return done(err); }
+            try {
+              assert(found);
+              assert.equal(found.age, 3);
+            } catch (e) { return done(e); }
+            return done();
+          });
+        });
+      });
+    });
+  });
+
 });
 
 
