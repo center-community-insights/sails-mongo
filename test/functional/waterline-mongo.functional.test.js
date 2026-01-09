@@ -437,11 +437,30 @@ describe('Functional :: Waterline + sails-mongo (real MongoDB)', function() {
       if (err) { return done(err); }
 
       var oid = new ObjectId(created.id);
-      models.user.findOne({ id: oid }).exec(function(err, found) {
+      // Waterline's criteria validator will reject an ObjectId instance in a stage-2 query
+      // (it sees ObjectId's internal properties like `buffer` as "modifiers").
+      // But stage-3 queries can legitimately contain instantiated ObjectIds (e.g. via wrappers),
+      // and the adapter should not clobber them when building the Mongo where-clause.
+      var s3q = {
+        method: 'find',
+        using: 'user',
+        criteria: {
+          where: { _id: oid },
+          limit: 1,
+          skip: 0,
+          sort: [],
+          select: ['name']
+        },
+        meta: {}
+      };
+
+      models.user._adapter.find('test', s3q, function(err, records) {
         if (err) { return done(err); }
         try {
-          assert(found);
-          assert.equal(found.id, created.id);
+          assert(Array.isArray(records));
+          assert.equal(records.length, 1);
+          assert.equal(records[0].id, created.id);
+          assert.equal(records[0].name, 'OidWhere');
         } catch (e) { return done(e); }
         return done();
       });
