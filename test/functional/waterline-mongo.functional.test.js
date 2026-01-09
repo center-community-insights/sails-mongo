@@ -71,6 +71,7 @@ describe('Functional :: Waterline + sails-mongo (real MongoDB)', function() {
       // Keep indexes, just clear docs between tests.
       await nativeDb.collection('user').deleteMany({});
       await nativeDb.collection('pet').deleteMany({});
+      await nativeDb.collection('legacy_user').deleteMany({});
     })
     .then(function(){ return done(); })
     .catch(done);
@@ -358,6 +359,113 @@ describe('Functional :: Waterline + sails-mongo (real MongoDB)', function() {
     });
   });
 
+
+  it('should include the primary key for every record when using select in find()', function(done) {
+    models.user.createEach([
+      { name: 'S1', age: 1, email: 's1-'+Date.now()+'@example.com' },
+      { name: 'S2', age: 2, email: 's2-'+Date.now()+'@example.com' },
+      { name: 'S3', age: 3, email: 's3-'+Date.now()+'@example.com' }
+    ])
+    .exec(function(err) {
+      if (err) { return done(err); }
+
+      models.user.find({
+        where: { age: { '>=': 1 } },
+        select: ['name'],
+        sort: 'age ASC'
+      })
+      .exec(function(err, records) {
+        if (err) { return done(err); }
+        try {
+          assert(Array.isArray(records));
+          assert.equal(records.length, 3);
+          _.each(records, function (r) {
+            assert.equal(typeof r.id, 'string');
+            assert.match(r.id, /^[0-9a-f]{24}$/);
+            assert(r.name);
+          });
+        } catch (e) { return done(e); }
+        return done();
+      });
+    });
+  });
+
+
+  it('should preserve primary keys when using select + populate', function(done) {
+    models.user.create({
+      name: 'PopOwner',
+      age: 1,
+      email: 'pop-'+Date.now()+'@example.com'
+    })
+    .exec(function(err, owner) {
+      if (err) { return done(err); }
+
+      models.pet.create({ name: 'PopPet', owner: owner.id })
+      .exec(function(err) {
+        if (err) { return done(err); }
+
+        models.user.findOne({ where: { id: owner.id }, select: ['name'] })
+        .populate('pets', { select: ['name'] })
+        .exec(function(err, found) {
+          if (err) { return done(err); }
+          try {
+            assert(found);
+            assert.equal(found.name, 'PopOwner');
+            assert.equal(typeof found.id, 'string');
+            assert.match(found.id, /^[0-9a-f]{24}$/);
+
+            assert(Array.isArray(found.pets));
+            assert.equal(found.pets.length, 1);
+            assert.equal(found.pets[0].name, 'PopPet');
+            assert.equal(typeof found.pets[0].id, 'string');
+            assert.match(found.pets[0].id, /^[0-9a-f]{24}$/);
+          } catch (e) { return done(e); }
+          return done();
+        });
+      });
+    });
+  });
+
+
+  it('should support ObjectId instances in where constraints (no clobbering)', function(done) {
+    models.user.create({
+      name: 'OidWhere',
+      age: 1,
+      email: 'oid-'+Date.now()+'@example.com'
+    })
+    .exec(function(err, created) {
+      if (err) { return done(err); }
+
+      var oid = new ObjectId(created.id);
+      models.user.findOne({ id: oid }).exec(function(err, found) {
+        if (err) { return done(err); }
+        try {
+          assert(found);
+          assert.equal(found.id, created.id);
+        } catch (e) { return done(e); }
+        return done();
+      });
+    });
+  });
+
+
+  it('should include the primary key when using select for dontUseObjectIds models', function(done) {
+    models.legacyuser.create({ id: 123, name: 'Legacy' }).exec(function(err) {
+      if (err) { return done(err); }
+
+      models.legacyuser.findOne({ where: { id: 123 }, select: ['name'] })
+      .exec(function(err, found) {
+        if (err) { return done(err); }
+        try {
+          assert(found);
+          assert.equal(found.name, 'Legacy');
+          assert.equal(found.id, 123);
+        } catch (e) { return done(e); }
+        return done();
+      });
+    });
+  });
+
 });
 
 
@@ -383,7 +491,8 @@ function setupWaterline(adapterUrl, modelsContainer, cb) {
         email: { type: 'string', required: true, autoMigrations: { columnType: 'string', unique: true, autoIncrement: false } },
         name: { type: 'string', autoMigrations: { columnType: 'string', unique: false, autoIncrement: false } },
         age: { type: 'number', autoMigrations: { columnType: 'number', unique: false, autoIncrement: false } },
-        blob: { type: 'ref', autoMigrations: { columnType: 'ref', unique: false, autoIncrement: false } }
+        blob: { type: 'ref', autoMigrations: { columnType: 'ref', unique: false, autoIncrement: false } },
+        pets: { collection: 'pet', via: 'owner' }
       }
     }),
     pet: _.extend({}, defaults, {
@@ -393,6 +502,15 @@ function setupWaterline(adapterUrl, modelsContainer, cb) {
         id: { type: 'string', columnName: '_id', autoMigrations: { columnType: 'string', unique: true, autoIncrement: false } },
         name: { type: 'string', autoMigrations: { columnType: 'string', unique: false, autoIncrement: false } },
         owner: { model: 'user' }
+      }
+    }),
+    legacyuser: _.extend({}, defaults, {
+      identity: 'legacyuser',
+      tableName: 'legacy_user',
+      dontUseObjectIds: true,
+      attributes: {
+        id: { type: 'number', columnName: '_id', autoMigrations: { columnType: 'number', unique: true, autoIncrement: false } },
+        name: { type: 'string', autoMigrations: { columnType: 'string', unique: false, autoIncrement: false } }
       }
     })
   };
