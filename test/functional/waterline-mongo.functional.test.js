@@ -331,6 +331,33 @@ describe('Functional :: Waterline + sails-mongo (real MongoDB)', function() {
     });
   });
 
+
+  it('should always include the primary key even when using select (so downstream .save() can work)', function(done) {
+    models.user.create({
+      name: 'SelectPk',
+      age: 5,
+      email: 'selectpk-'+Date.now()+'@example.com'
+    })
+    .exec(function(err, created) {
+      if (err) { return done(err); }
+
+      models.user.findOne({
+        where: { id: created.id },
+        select: ['name']
+      })
+      .exec(function(err, found) {
+        if (err) { return done(err); }
+        try {
+          assert(found);
+          assert.equal(found.name, 'SelectPk');
+          assert.equal(typeof found.id, 'string');
+          assert.match(found.id, /^[0-9a-f]{24}$/);
+        } catch (e) { return done(e); }
+        return done();
+      });
+    });
+  });
+
 });
 
 
