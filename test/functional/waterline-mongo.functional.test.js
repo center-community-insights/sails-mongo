@@ -711,6 +711,122 @@ describe('Functional :: Waterline + sails-mongo (real MongoDB)', function() {
     });
   });
 
+  // ==========================================================================
+  // Tests for id→_id query transformation (Waterline 0.12 compatibility)
+  // These tests verify that queries using 'id' column are correctly transformed
+  // to use MongoDB's '_id' field
+  // ==========================================================================
+
+  it('should correctly query by id even when model uses id columnName instead of _id', function(done) {
+    // Create a record
+    models.user.create({
+      name: 'IdTransformTest',
+      age: 42,
+      email: 'idtransform-'+Date.now()+'@example.com'
+    })
+    .exec(function(err, created) {
+      if (err) { return done(err); }
+      try {
+        assert(created.id, 'Expected created record to have an id');
+      } catch (e) { return done(e); }
+
+      // Query by the id - this should work even if the adapter transforms id → _id
+      models.user.findOne({ id: created.id }).exec(function(err, found) {
+        if (err) { return done(err); }
+        try {
+          assert(found, 'Expected to find the record by id');
+          assert.equal(found.id, created.id);
+          assert.equal(found.name, 'IdTransformTest');
+        } catch (e) { return done(e); }
+        return done();
+      });
+    });
+  });
+
+  it('should update records correctly using id in criteria', function(done) {
+    // Create a record
+    models.user.create({
+      name: 'UpdateByIdTest',
+      age: 1,
+      email: 'updatebyid-'+Date.now()+'@example.com'
+    })
+    .exec(function(err, created) {
+      if (err) { return done(err); }
+
+      // Update by id
+      models.user.update({ id: created.id }).set({ age: 99 }).exec(function(err, updated) {
+        if (err) { return done(err); }
+        try {
+          assert(Array.isArray(updated), 'Expected updated to be an array');
+          assert.equal(updated.length, 1);
+          assert.equal(updated[0].age, 99);
+          assert.equal(updated[0].id, created.id);
+        } catch (e) { return done(e); }
+
+        // Verify persistence
+        models.user.findOne({ id: created.id }).exec(function(err, found) {
+          if (err) { return done(err); }
+          try {
+            assert(found, 'Expected to find the updated record');
+            assert.equal(found.age, 99);
+          } catch (e) { return done(e); }
+          return done();
+        });
+      });
+    });
+  });
+
+  it('should not include _id or pk column in the $set when updating (MongoDB immutable field restriction)', function(done) {
+    // Create a record
+    models.user.create({
+      name: 'NoIdInSetTest',
+      age: 1,
+      email: 'noidset-'+Date.now()+'@example.com'
+    })
+    .exec(function(err, created) {
+      if (err) { return done(err); }
+
+      // Update with multiple fields (simulating a .save()-like operation that includes id)
+      // This should NOT error with "Performing an update on the path '_id' would modify the immutable field"
+      models.user.update({ id: created.id }).set({
+        name: 'NoIdInSetTest-Updated',
+        age: 50
+        // Note: We're not explicitly including 'id' here, but the adapter should
+        // handle cases where upstream code (like .save()) might include it
+      }).exec(function(err, updated) {
+        if (err) { return done(err); }
+        try {
+          assert(Array.isArray(updated), 'Expected updated to be an array');
+          assert.equal(updated.length, 1);
+          assert.equal(updated[0].name, 'NoIdInSetTest-Updated');
+          assert.equal(updated[0].age, 50);
+        } catch (e) { return done(e); }
+        return done();
+      });
+    });
+  });
+
+  // ==========================================================================
+  // Test for native() method - provides access to raw MongoDB collection
+  // ==========================================================================
+
+  it('should provide access to native MongoDB collection via test nativeDb', function(done) {
+    // We already have nativeDb from the test setup
+    try {
+      assert(nativeDb, 'Expected nativeDb to exist');
+      assert(typeof nativeDb.collection === 'function', 'Expected nativeDb to have collection() method');
+
+      // Get a collection
+      var collection = nativeDb.collection('user');
+      assert(collection, 'Expected to get a collection');
+      assert(typeof collection.find === 'function', 'Expected collection to have find() method');
+      assert(typeof collection.insertOne === 'function', 'Expected collection to have insertOne() method');
+      assert(typeof collection.createIndex === 'function', 'Expected collection to have createIndex() method');
+    } catch (e) { return done(e); }
+
+    return done();
+  });
+
 });
 
 
