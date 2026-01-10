@@ -1,6 +1,7 @@
 var assert = require('assert');
 var createManager = require('machine').build(require('../../').createManager);
 var getConnection = require('machine').build(require('../../').getConnection);
+var destroyManager = require('machine').build(require('../../').destroyManager);
 
 describe('Connectable ::', function() {
   describe('Get Connection', function() {
@@ -22,6 +23,12 @@ describe('Connectable ::', function() {
         manager = report.manager;
         return done();
       });
+    });
+
+    // Cleanup: ensure manager is closed so mocha can exit cleanly.
+    after(function(done) {
+      if (!manager) { return done(); }
+      destroyManager({ manager: manager }).exec(function () { return done(); });
     });
 
     it('should successfully return a Mongo Server instance', function(done) {

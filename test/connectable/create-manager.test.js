@@ -1,5 +1,6 @@
 var assert = require('assert');
 var createManager = require('machine').build(require('../../').createManager);
+var destroyManager = require('machine').build(require('../../').destroyManager);
 
 describe('Connectable ::', function() {
   describe('Create Manager', function() {
@@ -7,10 +8,16 @@ describe('Connectable ::', function() {
       createManager({
         connectionString: process.env.WATERLINE_ADAPTER_TESTS_URL || 'localhost:27017/mppg'
       })
-      .exec(function(err) {
+      .exec(function(err, report) {
         if (err) {
           return done(err);
         }
+
+        // Cleanup: modern MongoDB driver keeps sockets/SDAM monitors alive unless closed.
+        if (report && report.manager) {
+          return destroyManager({ manager: report.manager }).exec(done);
+        }
+
         return done();
       });
     });
@@ -45,7 +52,8 @@ describe('Connectable ::', function() {
           assert(report.manager);
         } catch (e) { return done(e); }
 
-        return done();
+        // Cleanup: close manager so mocha can exit cleanly.
+        return destroyManager({ manager: report.manager }).exec(done);
       });
     });
   });

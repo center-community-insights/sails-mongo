@@ -1,6 +1,7 @@
 var createManager = require('machine').build(require('../../').createManager);
 var getConnection = require('machine').build(require('../../').getConnection);
 var releaseConnection = require('machine').build(require('../../').releaseConnection);
+var destroyManager = require('machine').build(require('../../').destroyManager);
 
 describe('Connectable ::', function() {
   describe('Release Connection', function() {
@@ -34,6 +35,12 @@ describe('Connectable ::', function() {
           return done();
         });
       });
+    });
+
+    // Cleanup: ensure manager is closed so mocha can exit cleanly.
+    after(function(done) {
+      if (!manager) { return done(); }
+      destroyManager({ manager: manager }).exec(function () { return done(); });
     });
 
     // The actual machine is a no-op so just ensure no error comes back.
