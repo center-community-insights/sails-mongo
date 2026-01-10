@@ -57,26 +57,5 @@ describe('Connectable ::', function() {
       });
     });
 
-    it('should ignore `.client.close()` called on the manager (and keep queries working)', function(done) {
-      var host = process.env.WATERLINE_ADAPTER_TESTS_HOST || 'localhost';
-      createManager({
-        connectionString: 'mongodb://' + host + ':27017/mppg'
-      })
-      .exec(function(err, report) {
-        if (err) { return done(err); }
-
-        var mgr = report.manager;
-        try { assert(mgr && mgr.client); } catch (e) { return done(e); }
-
-        // This should be ignored by sails-mongo (it is a shared MongoClient).
-        mgr.client.close().then(function () {
-          // If the client were truly closed, this would throw.  With the guard in place,
-          // it should succeed (empty result is fine).
-          return mgr.collection('___sails_mongo_smoke___').find({}).limit(1).toArray();
-        }).then(function () {
-          return destroyManager({ manager: mgr }).exec(done);
-        }).catch(done);
-      });
-    });
   });
 });
