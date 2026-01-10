@@ -5,7 +5,7 @@
   "main": "./lib",
   "scripts": {
     "test": "npm run lint && npm run custom-tests",
-    "custom-tests": "SAILS_MONGO_NO_LEGACY_WATERLINE=1 node node_modules/mocha/bin/mocha --timeout 5000 --bail test/run-adapter-specific-tests && SAILS_MONGO_NO_LEGACY_WATERLINE=1 node node_modules/mocha/bin/mocha --timeout 5000 --bail test/connectable/ && SAILS_MONGO_NO_LEGACY_WATERLINE=1 node node_modules/mocha/bin/mocha --timeout 20000 --bail test/functional/ && SAILS_MONGO_NO_LEGACY_WATERLINE=1 node node_modules/mocha/bin/mocha --timeout 5000 --bail test/run-standard-tests",
+    "custom-tests": "SAILS_MONGO_NO_LEGACY_WATERLINE=1 node node_modules/mocha/bin/mocha --timeout 5000 --bail test/run-adapter-specific-tests && SAILS_MONGO_NO_LEGACY_WATERLINE=1 node node_modules/mocha/bin/mocha --timeout 5000 --bail test/connectable/ && SAILS_MONGO_NO_LEGACY_WATERLINE=1 node node_modules/mocha/bin/mocha --timeout 20000 --bail test/functional/ && SAILS_MONGO_NO_LEGACY_WATERLINE=1 node node_modules/mocha/bin/mocha --timeout 5000 --bail test/run-standard-tests; EXIT=$?; docker-compose down 2>/dev/null; exit $EXIT",
     "lint": "node node_modules/eslint/bin/eslint . --max-warnings=0",
     "start-mongodb": "docker-compose up -d mongo",
     "stop-mongodb": "docker-compose down",
