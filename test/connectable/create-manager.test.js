@@ -2,11 +2,13 @@ var assert = require('assert');
 var createManager = require('machine').build(require('../../').createManager);
 var destroyManager = require('machine').build(require('../../').destroyManager);
 
+var MONGO_PORT = process.env.MONGO_PORT || '27017';
+
 describe('Connectable ::', function() {
   describe('Create Manager', function() {
     it('should work without a protocol in the connection string', function(done) {
       createManager({
-        connectionString: process.env.WATERLINE_ADAPTER_TESTS_URL || 'localhost:27017/mppg'
+        connectionString: process.env.WATERLINE_ADAPTER_TESTS_URL || ('localhost:' + MONGO_PORT + '/mppg')
       })
       .exec(function(err, report) {
         if (err) {
@@ -24,7 +26,7 @@ describe('Connectable ::', function() {
 
     it('should not work with an invalid protocol in the connection string', function(done) {
       createManager({
-        connectionString: 'foobar://localhost:27017/mppg'
+        connectionString: 'foobar://localhost:' + MONGO_PORT + '/mppg'
       })
       .exec(function(err) {
         try {
@@ -41,7 +43,7 @@ describe('Connectable ::', function() {
       var host = process.env.WATERLINE_ADAPTER_TESTS_HOST || 'localhost';
 
       createManager({
-        connectionString: 'mongodb://' + host + ':27017/mppg'
+        connectionString: 'mongodb://' + host + ':' + MONGO_PORT + '/mppg'
       })
       .exec(function(err, report) {
         if (err) {

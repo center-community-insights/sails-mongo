@@ -3,6 +3,8 @@ var createManager = require('machine').build(require('../../').createManager);
 var getConnection = require('machine').build(require('../../').getConnection);
 var destroyManager = require('machine').build(require('../../').destroyManager);
 
+var MONGO_PORT = process.env.MONGO_PORT || '27017';
+
 describe('Connectable ::', function() {
   describe('Get Connection', function() {
     var manager;
@@ -13,7 +15,7 @@ describe('Connectable ::', function() {
       var host = process.env.WATERLINE_ADAPTER_TESTS_HOST || 'localhost';
 
       createManager({
-        connectionString: 'mongodb://' + host + ':27017/mppg'
+        connectionString: 'mongodb://' + host + ':' + MONGO_PORT + '/mppg'
       })
       .exec(function(err, report) {
         if (err) {

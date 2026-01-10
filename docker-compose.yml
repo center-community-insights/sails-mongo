@@ -7,8 +7,9 @@ services:
       - mongo
     environment:
       - WATERLINE_ADAPTER_TESTS_DATABASE=sails-mongo
-      - WATERLINE_ADAPTER_TESTS_URL=mongo/testdb
+      - WATERLINE_ADAPTER_TESTS_URL=mongo:27017/testdb
       - WATERLINE_ADAPTER_TESTS_HOST=mongo
+      - MONGO_PORT=27017
       - NODE_ENV=test
     user: node
     working_dir: /home/node/sails-mongo
@@ -22,4 +23,4 @@ services:
     restart: always
     command: "--logpath=/dev/null"
     ports:
-      - "27017:27017"
+      - "27018:27017"

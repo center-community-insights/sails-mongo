@@ -718,7 +718,7 @@ function setup(fixtures, modelsContainer, cb) {
   var datastores = {
     test: {
       adapter: 'sails-mongo',
-      url: process.env.WATERLINE_ADAPTER_TESTS_URL || 'localhost/sails_mongo'
+      url: process.env.WATERLINE_ADAPTER_TESTS_URL || ('localhost:' + (process.env.MONGO_PORT || '27017') + '/sails_mongo')
     }
   };
 
