@@ -745,6 +745,35 @@ describe('Functional :: Waterline + sails-mongo (real MongoDB)', function() {
     });
   });
 
+  it('should match by id even if existing record stored _id as string that looks like ObjectId', function(done) {
+    // This is the session-like failure mode:
+    // a legacy system stores `_id` as a string, but it happens to be 24 hex chars.
+    // If the adapter eagerly converts criteria to ObjectId, it will stop matching and appear "missing".
+    var hex = new ObjectId().toString(); // 24-hex string
+
+    Promise.resolve()
+    .then(async function() {
+      await nativeDb.collection('user').insertOne({
+        _id: hex, // IMPORTANT: stored as STRING, not ObjectId
+        name: 'HexStringId',
+        age: 10,
+        email: 'hexstringid-'+Date.now()+'@example.com'
+      });
+    })
+    .then(function() {
+      models.user.findOne({ id: hex }).exec(function(err, found) {
+        if (err) { return done(err); }
+        try {
+          assert(found, 'Expected to find record by id');
+          assert.equal(found.id, hex);
+          assert.equal(found.name, 'HexStringId');
+        } catch (e) { return done(e); }
+        return done();
+      });
+    })
+    .catch(done);
+  });
+
   // ==========================================================================
   // Tests for id→_id query transformation (Waterline 0.12 compatibility)
   // These tests verify that queries using 'id' column are correctly transformed
