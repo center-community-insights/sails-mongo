@@ -692,21 +692,55 @@ describe('Functional :: Waterline + sails-mongo (real MongoDB)', function() {
           // Now modify and save - this is what _createRoles does
           roleObj.name = 'CoUSave-Modified';
 
-          // The record instance should have .save() if it came from a proper Waterline query
-          // But update() returns plain objects in modern Waterline, so .save() won't exist
-          // This test documents the expected behavior
+          // Backwards compatibility requirement (nxus-users):
+          // update() results should be saveable via record.save() in legacy patterns.
+          try {
+            assert.equal(typeof roleObj.save, 'function', 'Expected updated record to have .save()');
+          } catch (e) { return done(e); }
 
-          if (typeof roleObj.save === 'function') {
-            roleObj.save(function(err) {
+          roleObj.save(function(err) {
+            if (err) { return done(err); }
+            // Verify it actually persisted.
+            models.user.findOne({ id: roleObj.id }).exec(function(err, found2) {
               if (err) { return done(err); }
+              try {
+                assert(found2, 'Expected to find record after save()');
+                assert.equal(found2.name, 'CoUSave-Modified');
+              } catch (e) { return done(e); }
               return done();
             });
-          } else {
-            // If .save() doesn't exist, that's actually expected behavior for update()
-            // The PK test above still validates the id is present
-            return done();
-          }
+          });
         });
+      });
+    });
+  });
+
+  it('should allow legacy array shorthand in where clause (id: [a,b])', function(done) {
+    // Some legacy Waterline / wrapper code uses array shorthand to mean "IN".
+    // This must not throw in buildMongoWhereClause.
+    var email1 = 'arrwhere-'+Date.now()+'-1@example.com';
+    var email2 = 'arrwhere-'+Date.now()+'-2@example.com';
+
+    models.user.createEach([
+      { name: 'ArrWhere1', age: 1, email: email1 },
+      { name: 'ArrWhere2', age: 2, email: email2 }
+    ]).fetch().exec(function(err, created) {
+      if (err) { return done(err); }
+      try {
+        assert(created && created.length === 2, 'Expected two created records');
+        assert(created[0].id && created[1].id, 'Expected created records to have ids');
+      } catch (e) { return done(e); }
+
+      var ids = [created[0].id, created[1].id];
+
+      models.user.find({ id: ids }).sort('age ASC').exec(function(err, found) {
+        if (err) { return done(err); }
+        try {
+          assert(found && found.length === 2, 'Expected to find two records');
+          assert.equal(found[0].email, email1);
+          assert.equal(found[1].email, email2);
+        } catch (e) { return done(e); }
+        return done();
       });
     });
   });
