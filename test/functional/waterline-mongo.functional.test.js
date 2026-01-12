@@ -774,6 +774,53 @@ describe('Functional :: Waterline + sails-mongo (real MongoDB)', function() {
     .catch(done);
   });
 
+  it('should support connect-waterline style criteria (sid + or at top-level) via legacy adapter signature', function(done) {
+    var adapter = require('../../');
+    var sid = 'BXR5CE8yapG652hkoTFGI8uW2J317kWx';
+    var future = new Date(Date.now() + 1000 * 60 * 60);
+
+    models.sessions.create({
+      sid: sid,
+      session: '{"cookie":{}}',
+      expires: future,
+      'has_expires': true
+    })
+    .exec(function(err) {
+      if (err) { return done(err); }
+
+      var legacyCriteria = {
+        sid: sid,
+        or: [
+          { 'has_expires': false },
+          { expires: { '>': new Date() } }
+        ]
+      };
+
+      // This mimics connect-waterline calling the adapter with a legacy signature:
+      //   adapter.find(datastoreName, tableName, criteria, cb)
+      adapter.find('test', 'sessions', legacyCriteria, function(err, found) {
+        if (err) { return done(err); }
+        try {
+          assert(Array.isArray(found));
+          assert.equal(found.length, 1);
+          assert.equal(found[0].sid, sid);
+        } catch (e) { return done(e); }
+
+        // Also mimic connect-waterline update: adapter.update(datastoreName, tableName, criteria, values, cb)
+        adapter.update('test', 'sessions', { sid: sid }, { session: '{"cookie":{"updated":true}}' }, function(err, updated) {
+          if (err) { return done(err); }
+          try {
+            assert(Array.isArray(updated));
+            assert.equal(updated.length, 1);
+            assert.equal(updated[0].sid, sid);
+            assert.equal(updated[0].session, '{"cookie":{"updated":true}}');
+          } catch (e) { return done(e); }
+          return done();
+        });
+      });
+    });
+  });
+
   // ==========================================================================
   // Tests for id→_id query transformation (Waterline 0.12 compatibility)
   // These tests verify that queries using 'id' column are correctly transformed
@@ -935,6 +982,19 @@ function setupWaterline(adapterUrl, modelsContainer, cb) {
       attributes: {
         id: { type: 'number', columnName: '_id', autoMigrations: { columnType: 'number', unique: true, autoIncrement: false } },
         name: { type: 'string', autoMigrations: { columnType: 'string', unique: false, autoIncrement: false } }
+      }
+    }),
+    sessions: _.extend({}, defaults, {
+      identity: 'sessions',
+      tableName: 'sessions',
+      primaryKey: 'sid',
+      dontUseObjectIds: true,
+      attributes: {
+        sid: { type: 'string', columnName: 'sid', required: true, unique: true, autoMigrations: { columnType: 'string', unique: true, autoIncrement: false } },
+        session: { type: 'string', autoMigrations: { columnType: 'string', unique: false, autoIncrement: false } },
+        expires: { type: 'ref', autoMigrations: { columnType: 'ref', unique: false, autoIncrement: false } },
+        'has_expires': { type: 'boolean', autoMigrations: { columnType: 'boolean', unique: false, autoIncrement: false } },
+        lastModified: { type: 'ref', autoMigrations: { columnType: 'ref', unique: false, autoIncrement: false } }
       }
     })
   };
