@@ -522,6 +522,65 @@ describe('Functional :: Waterline + sails-mongo (real MongoDB)', function() {
     });
   });
 
+  it('should accept foreign bson ObjectId-like values inside in/nin modifiers', function(done) {
+    models.user.create({
+      name: 'ForeignOidIn',
+      age: 2,
+      email: 'foidin-'+Date.now()+'@example.com'
+    })
+    .exec(function(err, created) {
+      if (err) { return done(err); }
+
+      var foreignLike = {
+        _bsontype: 'ObjectId',
+        toHexString: function () { return created.id; }
+      };
+
+      // Use stage-3 to avoid WL's stage-2 criteria validator choking on ObjectId internals.
+      var s3q = {
+        method: 'find',
+        using: 'user',
+        criteria: {
+          where: { _id: { in: [foreignLike] } },
+          limit: 10,
+          skip: 0,
+          sort: []
+        },
+        meta: {}
+      };
+
+      models.user._adapter.find('test', s3q, function(err, records) {
+        if (err) { return done(err); }
+        try {
+          assert(Array.isArray(records));
+          assert.equal(records.length, 1);
+          assert.equal(records[0].id, created.id);
+        } catch (e) { return done(e); }
+
+        var s3qNin = {
+          method: 'find',
+          using: 'user',
+          criteria: {
+            where: { _id: { nin: [foreignLike] } },
+            limit: 10,
+            skip: 0,
+            sort: []
+          },
+          meta: {}
+        };
+
+        models.user._adapter.find('test', s3qNin, function(err, recordsNin) {
+          if (err) { return done(err); }
+          try {
+            assert(Array.isArray(recordsNin));
+            assert.equal(recordsNin.length, 0);
+          } catch (e) { return done(e); }
+          return done();
+        });
+      });
+    });
+  });
+
 
   it('should include the primary key when using select for dontUseObjectIds models', function(done) {
     models.legacyuser.create({ id: 123, name: 'Legacy' }).exec(function(err) {
