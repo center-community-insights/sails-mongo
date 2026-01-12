@@ -222,7 +222,35 @@ describe('Functional :: Waterline + sails-mongo (real MongoDB)', function() {
               assert.equal(likeFound.length, 1);
               assert.equal(likeFound[0].name, 'FooBar');
             } catch (e) { return done(e); }
-            return done();
+
+            // Legacy contains/startsWith/endsWith modifiers should work.
+            models.user.find({ where: { name: { contains: 'ooB' } } })
+            .exec(function(err, containsFound) {
+              if (err) { return done(err); }
+              try {
+                assert.equal(containsFound.length, 1);
+                assert.equal(containsFound[0].name, 'FooBar');
+              } catch (e) { return done(e); }
+
+              models.user.find({ where: { name: { startsWith: 'Foo' } } })
+              .exec(function(err, swFound) {
+                if (err) { return done(err); }
+                try {
+                  assert.equal(swFound.length, 1);
+                  assert.equal(swFound[0].name, 'FooBar');
+                } catch (e) { return done(e); }
+
+                models.user.find({ where: { name: { endsWith: 'Bar' } } })
+                .exec(function(err, ewFound) {
+                  if (err) { return done(err); }
+                  try {
+                    assert.equal(ewFound.length, 1);
+                    assert.equal(ewFound[0].name, 'FooBar');
+                  } catch (e) { return done(e); }
+                  return done();
+                });
+              });
+            });
           });
         });
       });
@@ -990,7 +1018,7 @@ function setupWaterline(adapterUrl, modelsContainer, cb) {
       primaryKey: 'sid',
       dontUseObjectIds: true,
       attributes: {
-        sid: { type: 'string', columnName: 'sid', required: true, unique: true, autoMigrations: { columnType: 'string', unique: true, autoIncrement: false } },
+        sid: { type: 'string', columnName: 'sid', required: true, autoMigrations: { columnType: 'string', unique: true, autoIncrement: false } },
         session: { type: 'string', autoMigrations: { columnType: 'string', unique: false, autoIncrement: false } },
         expires: { type: 'ref', autoMigrations: { columnType: 'ref', unique: false, autoIncrement: false } },
         'has_expires': { type: 'boolean', autoMigrations: { columnType: 'boolean', unique: false, autoIncrement: false } },
