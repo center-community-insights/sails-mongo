@@ -813,39 +813,89 @@ describe('Functional :: Waterline + sails-mongo (real MongoDB)', function() {
       expires: future,
       'has_expires': true
     })
-    .exec(function(err) {
+    .exec(function(err, createdSession) {
       if (err) { return done(err); }
+      try {
+        assert(createdSession, 'Expected create() to return a session record');
+        assert.equal(createdSession.sid, sid);
+      } catch (e) { return done(e); }
 
-      var legacyCriteria = {
-        sid: sid,
-        or: [
-          { 'has_expires': false },
-          { expires: { '>': new Date() } }
-        ]
-      };
-
-      // This mimics connect-waterline calling the adapter with a legacy signature:
-      //   adapter.find(datastoreName, tableName, criteria, cb)
-      adapter.find('test', 'sessions', legacyCriteria, function(err, found) {
-        if (err) { return done(err); }
+      // Sanity check: ensure it exists in Mongo where the adapter will query it.
+      Promise.resolve()
+      .then(async function () {
+        return await nativeDb.collection('sessions').findOne({ sid: sid });
+      })
+      .then(function (nativeFound) {
         try {
-          assert(Array.isArray(found));
-          assert.equal(found.length, 1);
-          assert.equal(found[0].sid, sid);
+          assert(nativeFound, 'Expected native mongo to find inserted session by sid');
         } catch (e) { return done(e); }
 
-        // Also mimic connect-waterline update: adapter.update(datastoreName, tableName, criteria, values, cb)
-        adapter.update('test', 'sessions', { sid: sid }, { session: '{"cookie":{"updated":true}}' }, function(err, updated) {
+        // Waterline 0.10/0.12 commonly wraps "where" at the top level.
+        // connect-waterline builds the inner `where` like this:
+        var legacyWhere = {
+          sid: sid,
+          or: [
+            { 'has_expires': false },
+            { expires: { '>': new Date() } }
+          ]
+        };
+
+        var legacyCriteria = {
+          where: legacyWhere,
+          limit: 1,
+          skip: 0,
+          sort: []
+        };
+
+        // Sanity check: adapter.native() should see the record in the same datastore/collection.
+        adapter.native('test', 'sessions', function(err, nativeCollection) {
           if (err) { return done(err); }
-          try {
-            assert(Array.isArray(updated));
-            assert.equal(updated.length, 1);
-            assert.equal(updated[0].sid, sid);
-            assert.equal(updated[0].session, '{"cookie":{"updated":true}}');
-          } catch (e) { return done(e); }
-          return done();
+          Promise.resolve()
+          .then(async function () {
+            return await nativeCollection.findOne({ sid: sid });
+          })
+          .then(function (nativeViaAdapter) {
+            try {
+              assert(nativeViaAdapter, 'Expected adapter.native() to find inserted session by sid');
+            } catch (e) { return done(e); }
+
+            // Sanity check: the inserted record should be queryable by sid alone.
+            adapter.find('test', 'sessions', { where: { sid: sid }, limit: 1, skip: 0, sort: [] }, function(err, foundBySidOnly) {
+              if (err) { return done(err); }
+              try {
+                assert(Array.isArray(foundBySidOnly));
+                assert.equal(foundBySidOnly.length, 1);
+                assert.equal(foundBySidOnly[0].sid, sid);
+              } catch (e) { return done(e); }
+
+              // This mimics connect-waterline calling the adapter with a legacy signature:
+              //   adapter.find(datastoreName, tableName, criteria, cb)
+              adapter.find('test', 'sessions', legacyCriteria, function(err, found) {
+                if (err) { return done(err); }
+                try {
+                  assert(Array.isArray(found));
+                  assert.equal(found.length, 1);
+                  assert.equal(found[0].sid, sid);
+                } catch (e) { return done(e); }
+
+                // Also mimic connect-waterline update: adapter.update(datastoreName, tableName, criteria, values, cb)
+                adapter.update('test', 'sessions', { sid: sid }, { session: '{"cookie":{"updated":true}}' }, function(err, updated) {
+                  if (err) { return done(err); }
+                  try {
+                    assert(Array.isArray(updated));
+                    assert.equal(updated.length, 1);
+                    assert.equal(updated[0].sid, sid);
+                    assert.equal(updated[0].session, '{"cookie":{"updated":true}}');
+                  } catch (e) { return done(e); }
+                  return done();
+                });
+              });
+            });
+          })
+          .catch(done);
         });
-      });
+      })
+      .catch(done);
     });
   });
 
