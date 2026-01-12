@@ -495,6 +495,33 @@ describe('Functional :: Waterline + sails-mongo (real MongoDB)', function() {
     });
   });
 
+  it('should accept foreign bson ObjectId-like values in criteria without BSONVersionError', function(done) {
+    // Simulate an ObjectId instance coming from a different bson version (e.g. mongodb@3.x in userland),
+    // which is incompatible with mongodb@6 driver unless normalized.
+    models.user.create({
+      name: 'ForeignOid',
+      age: 1,
+      email: 'foid-'+Date.now()+'@example.com'
+    })
+    .exec(function(err, created) {
+      if (err) { return done(err); }
+
+      var foreignLike = {
+        _bsontype: 'ObjectId',
+        toHexString: function () { return created.id; }
+      };
+
+      models.user.findOne({ id: foreignLike }).exec(function(err, found) {
+        if (err) { return done(err); }
+        try {
+          assert(found, 'Expected to find record using foreign ObjectId-like criteria');
+          assert.equal(found.id, created.id);
+        } catch (e) { return done(e); }
+        return done();
+      });
+    });
+  });
+
 
   it('should include the primary key when using select for dontUseObjectIds models', function(done) {
     models.legacyuser.create({ id: 123, name: 'Legacy' }).exec(function(err) {
